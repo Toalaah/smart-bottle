@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-
 	"github.com/toalaah/smart-bottle/pkg/build"
 	"tinygo.org/x/bluetooth"
 )

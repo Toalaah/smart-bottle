@@ -24,6 +24,7 @@ build-uf2: ## Build UF2 file for flashing.
 
 clean: ## Remove all build artifacts
 	@find . -maxdepth 1 -type f -executable -exec sh -c 'echo {} && rm {}' \;
+	@find . -type f -name '*.pem' -not -path './backend/.venv/*' -exec sh -c 'echo {} && rm {}' \;
 .PHONY: clean
 
 .DEFAULT: help

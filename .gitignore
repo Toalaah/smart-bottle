@@ -3,3 +3,4 @@
 ./client
 .venv
 __pycache__
+*.pem
