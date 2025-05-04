@@ -30,7 +30,7 @@ func main() {
 	})
 
 	result := <-ch
-	println("connecting to ", result.Address.String())
+	println("connecting to", result.Address.String())
 	device, err := adapter.Connect(result.Address, bluetooth.ConnectionParams{})
 	must("connect to device", err)
 

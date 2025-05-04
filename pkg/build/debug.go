@@ -1,10 +1,13 @@
 package build
 
-import "tinygo.org/x/bluetooth"
+import (
+	"tinygo.org/x/bluetooth"
+)
 
 const (
-	Debug       = true
-	ServiceName = "Smart Flask"
+	Debug          = true
+	ServiceName    = "Smart Flask"
+	ServiceVersion = "0.1"
 )
 
 var (
