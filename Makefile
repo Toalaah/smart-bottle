@@ -18,8 +18,12 @@ build: ## Build executable.
 	@tinygo build -target=$(TARGET) $(FLAGS) -o main.elf $(PROG)
 .PHONY: build
 
-build-uf2: main.go ## Build UF2 file for flashing.
+build-uf2: ## Build UF2 file for flashing.
 	@tinygo build -target=$(TARGET) $(FLAGS) -o main.uf2 $(PROG)
 .PHONY: build-uf2
+
+clean: ## Remove all build artifacts
+	@find . -maxdepth 1 -type f -executable -exec sh -c 'echo {} && rm {}' \;
+.PHONY: clean
 
 .DEFAULT: help
