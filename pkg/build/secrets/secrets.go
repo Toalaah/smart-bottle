@@ -1,43 +1,23 @@
 package secrets
 
 import (
-	"crypto/ed25519"
-	"crypto/x509"
 	_ "embed"
 	"encoding/pem"
+
+	"golang.org/x/crypto/curve25519"
 )
 
 //go:embed bottle-private.pem
 var bottlePrivateKeyPEM []byte
-var BottlePrivateKey ed25519.PrivateKey
-var BottlePublicKey ed25519.PublicKey
+var BottlePrivateKey []byte
+var BottlePublicKey []byte
 
 func init() {
-	priv, pub := parse25519Keypair(bottlePrivateKeyPEM)
-	BottlePrivateKey = priv
-	BottlePublicKey = pub
-}
-
-func parse25519Keypair(privBlock []byte) (ed25519.PrivateKey, ed25519.PublicKey) {
-	block, _ := pem.Decode(privBlock)
-	if block == nil {
-		panic("failed to parse PEM block containing the private key")
-	}
-
-	p, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	var err error
+	block, _ := pem.Decode(bottlePrivateKeyPEM)
+	BottlePrivateKey = block.Bytes[len(block.Bytes)-32:]
+	BottlePublicKey, err = curve25519.X25519(BottlePrivateKey, curve25519.Basepoint)
 	if err != nil {
-		panic("failed to parse blocks: " + err.Error())
+		panic(err)
 	}
-
-	priv, ok := p.(ed25519.PrivateKey)
-	if !ok {
-		panic("failed to cast parsed private key to type ed25519.PrivateKey")
-	}
-
-	pub, ok := priv.Public().(ed25519.PublicKey)
-	if !ok {
-		panic("failed to cast parsed public key to type ed25519.PublicKey")
-	}
-
-	return priv, pub
 }
