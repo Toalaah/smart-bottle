@@ -1,10 +1,10 @@
 package crypto
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"errors"
 	"io"
+	"math/rand"
 
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/curve25519"
