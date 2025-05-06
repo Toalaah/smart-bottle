@@ -9,4 +9,8 @@ const (
 	ConsumptionRate
 )
 
-type Message []byte
+type Message struct {
+	Length uint8
+	Type   MessageType
+	Value  []byte
+}

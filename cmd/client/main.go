@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/toalaah/smart-bottle/pkg/build"
+	"github.com/toalaah/smart-bottle/pkg/build/secrets"
+	"github.com/toalaah/smart-bottle/pkg/crypto"
 	"tinygo.org/x/bluetooth"
 )
 
@@ -65,8 +68,15 @@ func main() {
 
 	// Wait for messages
 	for {
-		msg := <-c
-		fmt.Printf("Data: %+v\n", msg)
+		payload := <-c
+		fmt.Printf("Cipher: %+v\n", payload)
+		l := payload[0]
+		cipher := payload[1 : l+1]
+		// TODO: the private key used here should be the user's not the bottle's. For now, it serves as a placeholder.
+		msg, err := crypto.DecryptEphemeralStaticX25519(cipher, secrets.BottlePrivateKey)
+		must("decrypt", err)
+		fmt.Printf("Msg: %+v\n", msg)
+
 	}
 }
 

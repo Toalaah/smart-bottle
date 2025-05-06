@@ -1,5 +1,5 @@
 TARGET ?= pico2-w
-FLAGS   = -stack-size=8kb
+FLAGS   = -stack-size=32kb
 PROG   ?= ./cmd/bottle
 
 help: ## Show this help.

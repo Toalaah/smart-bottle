@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/toalaah/smart-bottle/pkg/build"
+	"github.com/toalaah/smart-bottle/pkg/transport"
 	"tinygo.org/x/bluetooth"
 )
 
@@ -14,8 +15,8 @@ type Service struct {
 	logger      *slog.Logger
 	advInterval time.Duration
 
-	txHnd bluetooth.Characteristic
-	buf   [4]byte
+	txHnd     bluetooth.Characteristic
+	txBufSize uint32
 }
 
 func NewService(opts ...ServiceOption) *Service {
@@ -24,6 +25,7 @@ func NewService(opts ...ServiceOption) *Service {
 		txHnd:       bluetooth.Characteristic{},
 		logger:      nil,
 		advInterval: 1000 * time.Millisecond,
+		txBufSize:   128,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -66,7 +68,7 @@ func (s *Service) Init() error {
 				{
 					Handle: &s.txHnd,
 					UUID:   build.CharacteristicUUID,
-					Value:  []byte{0},
+					Value:  make([]byte, s.txBufSize),
 					Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
 				},
 			},
@@ -107,10 +109,17 @@ func (s *Service) Init() error {
 	return nil
 }
 
-func (s *Service) Send(v uint8) error {
-	s.debug("writing value", "value", v, "handle", s.txHnd)
-	s.buf[0] = v
-	if _, err := s.txHnd.Write(s.buf[:1]); err != nil {
+func (s *Service) SendMessage(m *transport.Message) error {
+	s.debug("writing value", "handle", s.txHnd, "length", m.Length)
+	if _, err := s.txHnd.Write(append([]byte{m.Length}, m.Value...)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Service) Send(payload []byte) error {
+	s.debug("writing value", "handle", s.txHnd, "length", len(payload))
+	if _, err := s.txHnd.Write(payload); err != nil {
 		return err
 	}
 	return nil
@@ -133,5 +142,11 @@ func WithLogger(logger *slog.Logger) ServiceOption {
 func WithAdvertisementInterval(interval time.Duration) ServiceOption {
 	return func(s *Service) {
 		s.advInterval = interval
+	}
+}
+
+func WithTXBufferSize(n uint32) ServiceOption {
+	return func(s *Service) {
+		s.txBufSize = n
 	}
 }
