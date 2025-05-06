@@ -2,7 +2,10 @@ module github.com/toalaah/smart-bottle
 
 go 1.24.2
 
-require tinygo.org/x/bluetooth v0.11.1-0.20250311112359-0d1c723c8c9a
+require (
+	golang.org/x/crypto v0.12.0
+	tinygo.org/x/bluetooth v0.11.1-0.20250311112359-0d1c723c8c9a
+)
 
 require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
