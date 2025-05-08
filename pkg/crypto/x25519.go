@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	ephemeralKeyBuf []byte = nil
+	ephemeralKeyBuf = make([]byte, curve25519.ScalarSize)
+	sharedKeyBuf    = make([]byte, chacha20poly1305.KeySize)
 )
 
 func EncryptEphemeralStaticX25519(msg, publicKey []byte) ([]byte, error) {
@@ -20,30 +21,17 @@ func EncryptEphemeralStaticX25519(msg, publicKey []byte) ([]byte, error) {
 	if len(publicKey) != curve25519.ScalarSize {
 		return nil, errors.New("unexpected public key size")
 	}
-
-	// Generate a new ephemeral key using a static buffer.
-	if ephemeralKeyBuf == nil {
-		ephemeralKeyBuf = make([]byte, curve25519.ScalarSize)
-	}
-
-	// Make sure we clear out the buffer after we no longer require it.
-	defer func() {
-		for i := range ephemeralKeyBuf {
-			ephemeralKeyBuf[i] = 0
-		}
-	}()
-
 	if _, err := rand.Read(ephemeralKeyBuf); err != nil {
 		return nil, err
 	}
 
-	key, err := ComputeSharedSecret(ephemeralKeyBuf, publicKey)
+	_, err := ComputeSharedSecret(sharedKeyBuf, ephemeralKeyBuf, publicKey)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create ChaCha20Poly1305 AEAD cipher.
-	aead, err := chacha20poly1305.New(key)
+	aead, err := chacha20poly1305.New(sharedKeyBuf)
 	if err != nil {
 		return nil, err
 	}
@@ -55,13 +43,14 @@ func EncryptEphemeralStaticX25519(msg, publicKey []byte) ([]byte, error) {
 	}
 
 	// Generate nonce. As this is also the output buffer we add additional capacity for cipher overhead, the message itself, and the ephemeral key which we will append to the end of the payload.
-	nonce := make([]byte, aead.NonceSize(), aead.NonceSize()+len(msg)+aead.Overhead()+len(ephemeralKeyBuf))
+	// nonce := make([]byte, aead.NonceSize(), aead.NonceSize()+len(msg)+aead.Overhead()+len(ephemeralKeyBuf))
+	nonce := make([]byte, 128)
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, err
 	}
 
 	// Seal cipher. We also add our ephemeral key to the associated data portion, allowing the recipient to verify that the ephemeral key which we pass alongside the cipher was not tampered.
-	cipher := aead.Seal(nonce, nonce, msg, ephemeralKeyBuf)
+	cipher := aead.Seal(nonce[:aead.NonceSize()], nonce[:aead.NonceSize()], msg, ephemeralKeyBuf)
 	cipher = append(cipher, ephemeralKeyBuf...)
 	return cipher, nil
 }
@@ -71,7 +60,8 @@ func DecryptEphemeralStaticX25519(payload, privateKey []byte) ([]byte, error) {
 	offset := len(payload) - curve25519.ScalarSize
 	encryptedMessage, ephemeralKey := payload[:offset], payload[offset:]
 
-	key, err := ComputeSharedSecret(privateKey, ephemeralKey)
+	key := make([]byte, chacha20poly1305.KeySize)
+	_, err := ComputeSharedSecret(key, privateKey, ephemeralKey)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +81,7 @@ func DecryptEphemeralStaticX25519(payload, privateKey []byte) ([]byte, error) {
 	return msg, nil
 }
 
-func ComputeSharedSecret(private, public []byte) ([]byte, error) {
+func ComputeSharedSecret(out, private, public []byte) ([]byte, error) {
 	// Assert valid key lengths.
 	if len(private) != curve25519.ScalarSize {
 		return nil, errors.New("unexpected private key size")
@@ -105,12 +95,13 @@ func ComputeSharedSecret(private, public []byte) ([]byte, error) {
 		return nil, err
 	}
 	// Create key via KDF.
-	h := hkdf.New(sha256.New, point, nil, nil)
-	key := make([]byte, chacha20poly1305.KeySize)
-	if n, err := io.ReadFull(h, key); err != nil {
+	if len(out) < chacha20poly1305.KeySize {
+		return nil, errors.New("out buffer is too small")
+	}
+	if n, err := io.ReadFull(hkdf.New(sha256.New, point, nil, nil), out); err != nil {
 		return nil, err
 	} else if n != chacha20poly1305.KeySize {
 		return nil, errors.New("could not read full key size")
 	}
-	return key, nil
+	return out, nil
 }
