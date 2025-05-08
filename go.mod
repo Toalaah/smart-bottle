@@ -2,10 +2,7 @@ module github.com/toalaah/smart-bottle
 
 go 1.24.2
 
-require (
-	golang.org/x/crypto v0.12.0
-	tinygo.org/x/bluetooth v0.11.1-0.20250311112359-0d1c723c8c9a
-)
+require golang.org/x/crypto v0.12.0
 
 require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
@@ -18,6 +15,9 @@ require (
 	github.com/tinygo-org/pio v0.2.0 // indirect
 	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
 	golang.org/x/sys v0.11.0 // indirect
+	tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1 // indirect
 )
 
 replace github.com/soypat/cyw43439 => github.com/soypat/cyw43439 v0.0.0-20250322192939-ffedeab80a50
+
+replace tinygo.org/x/bluetooth => tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1 // indirect
