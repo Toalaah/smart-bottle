@@ -1,47 +1,62 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log/slog"
 	"machine/usb/cdc"
-	"math/rand/v2"
+	"math"
 	"os"
 	"time"
 
+	"github.com/toalaah/smart-bottle/pkg/ble"
 	"github.com/toalaah/smart-bottle/pkg/build"
 	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
+	"github.com/toalaah/smart-bottle/pkg/sensor"
 	"github.com/toalaah/smart-bottle/pkg/transport"
 )
 
 func main() {
-	var l *slog.Logger = nil
+	var (
+		l         *slog.Logger = nil
+		fillLevel float32
+		err       error
+		buf       []byte = make([]byte, 4)
+	)
 	if build.Debug {
 		cdc.EnableUSBCDC()
 		l = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
 
 	time.Sleep(time.Second * 3)
-	svc := NewService(
-		WithLogger(l),
-		WithAdvertisementInterval(1250*time.Millisecond),
-		WithTXBufferSize(64),
+	svc := ble.NewService(
+		// ble.WithLogger(l),
+		ble.WithAdvertisementInterval(1250*time.Millisecond),
+		ble.WithTXBufferSize(64),
 	)
 	must("initialize BLE service", svc.Init())
 
-	var randomValue uint8
+	depthSensor := sensor.NewDepthSensorService(
+		sensor.WithLogger(l),
+	)
+	must("initialize depth sensor", depthSensor.Init())
+
 	msg := &transport.Message{
 		Type: transport.WaterLevel,
 	}
 	for {
-		time.Sleep(time.Second * 5)
-		randomValue = uint8(rand.IntN(100))
-		println("New value: ", randomValue)
-		// TODO: the public key used here should be the user's not the bottle's. For now, it serves as a placeholder.
-		cipher, err := crypto.EncryptEphemeralStaticX25519([]byte{randomValue}, secrets.BottlePublicKey)
-		msg.Value = cipher
-		msg.Length = uint8(len(cipher))
+		time.Sleep(time.Second * 3)
+		fillLevel, err = depthSensor.Read()
+		if err != nil {
+			println("error", err)
+		}
+		l.Debug("read water level", "level", fillLevel)
+		binary.LittleEndian.PutUint32(buf, math.Float32bits(fillLevel))
+		// l.Debug("wrote float to buf", "level", fillLevel, "buf", buf)
+		cipher, err := crypto.EncryptEphemeralStaticX25519(buf, secrets.UserPublicKey)
 		must("encrypt", err)
+		msg.Load(cipher)
 		must("send successfully", svc.SendMessage(msg))
 	}
 
@@ -49,7 +64,7 @@ func main() {
 
 func must(msg string, err error) {
 	if err != nil {
-		println(fmt.Sprintf("Failed to %s, halting execution: %s", msg, err))
+		println(fmt.Sprintf("failed to %s, halting execution: %s", msg, err))
 		// By halting execution, we can somewhat cleanly reflash using tinygo's builtin flashing utility without having to manually re-enter BOOTSEL beforehand (assuming that USBCDC is enabled). This speeds up the development workflow significantly.
 		select {}
 	}

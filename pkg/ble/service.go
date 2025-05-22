@@ -1,4 +1,4 @@
-package main
+package ble
 
 import (
 	"log/slog"
@@ -9,7 +9,7 @@ import (
 	"tinygo.org/x/bluetooth"
 )
 
-type Service struct {
+type GattService struct {
 	service     *bluetooth.Service
 	adapter     *bluetooth.Adapter
 	logger      *slog.Logger
@@ -19,8 +19,8 @@ type Service struct {
 	txBufSize uint32
 }
 
-func NewService(opts ...ServiceOption) *Service {
-	s := &Service{
+func NewService(opts ...ServiceOption) *GattService {
+	s := &GattService{
 		adapter:     bluetooth.DefaultAdapter,
 		txHnd:       bluetooth.Characteristic{},
 		logger:      nil,
@@ -33,7 +33,7 @@ func NewService(opts ...ServiceOption) *Service {
 	return s
 }
 
-func (s *Service) Init() error {
+func (s *GattService) Init() error {
 	s.debug("enabling adapter")
 	if err := s.adapter.Enable(); err != nil {
 		return err
@@ -109,7 +109,7 @@ func (s *Service) Init() error {
 	return nil
 }
 
-func (s *Service) SendMessage(m *transport.Message) error {
+func (s *GattService) SendMessage(m *transport.Message) error {
 	s.debug("writing value", "handle", s.txHnd, "length", m.Length)
 	if _, err := s.txHnd.Write(append([]byte{m.Length}, m.Value...)); err != nil {
 		return err
@@ -117,7 +117,7 @@ func (s *Service) SendMessage(m *transport.Message) error {
 	return nil
 }
 
-func (s *Service) Send(payload []byte) error {
+func (s *GattService) Send(payload []byte) error {
 	s.debug("writing value", "handle", s.txHnd, "length", len(payload))
 	if _, err := s.txHnd.Write(payload); err != nil {
 		return err
@@ -125,28 +125,28 @@ func (s *Service) Send(payload []byte) error {
 	return nil
 }
 
-func (s *Service) debug(msg string, args ...any) {
+func (s *GattService) debug(msg string, args ...any) {
 	if s.logger != nil {
 		s.logger.Debug(msg, args...)
 	}
 }
 
-type ServiceOption func(*Service)
+type ServiceOption func(*GattService)
 
 func WithLogger(logger *slog.Logger) ServiceOption {
-	return func(s *Service) {
+	return func(s *GattService) {
 		s.logger = logger
 	}
 }
 
 func WithAdvertisementInterval(interval time.Duration) ServiceOption {
-	return func(s *Service) {
+	return func(s *GattService) {
 		s.advInterval = interval
 	}
 }
 
 func WithTXBufferSize(n uint32) ServiceOption {
-	return func(s *Service) {
+	return func(s *GattService) {
 		s.txBufSize = n
 	}
 }
