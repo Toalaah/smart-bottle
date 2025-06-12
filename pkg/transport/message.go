@@ -34,7 +34,7 @@ func UnmarshalBytes(m *Message, b []byte) error {
 	m.Length = b[1]
 	rest := b[2:]
 	if len(rest) < int(m.Length) {
-		return fmt.Errorf("expected payload value to have length of at least %d", m.Length)
+		return fmt.Errorf("expected payload value to have length of at least %d, got %d", len(rest), m.Length)
 	}
 	m.Value = rest[:m.Length]
 	return nil

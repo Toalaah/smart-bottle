@@ -9,7 +9,7 @@ func TestMessageMarshaling(t *testing.T) {
 	raw := []byte("hello world")
 	msg := &Message{Type: WaterLevel}
 	expected := append([]byte{byte(WaterLevel), byte(len(raw))}, raw...)
-	msg.LoadPayload(raw)
+	msg.Load(raw)
 	got := msg.MarshalBytes()
 	if bytes.Compare(got, expected) != 0 {
 		t.Errorf("Expected decrypted plaintext to be '%v', got '%v'", expected, got)
@@ -19,7 +19,7 @@ func TestMessageMarshaling(t *testing.T) {
 func TestMessageUnmarshaling(t *testing.T) {
 	raw := []byte("hello world")
 	msg := &Message{Type: WaterLevel}
-	msg.LoadPayload(raw)
+	msg.Load(raw)
 	payload := msg.MarshalBytes()
 
 	out := &Message{}
