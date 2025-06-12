@@ -1,122 +1,46 @@
 package main
 
 import (
-	"errors"
+	"encoding/binary"
+	"fmt"
 	"image/color"
+	"math"
 	"os"
 	"time"
 
+	"log/slog"
+
 	"gioui.org/app"
+	"gioui.org/font"
 	"gioui.org/io/key"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
-	"github.com/toalaah/smart-bottle/pkg/build"
-
-	"log/slog"
-
-	"tinygo.org/x/bluetooth"
+	"github.com/toalaah/smart-bottle/pkg/ble"
+	"github.com/toalaah/smart-bottle/pkg/ble/client"
+	"github.com/toalaah/smart-bottle/pkg/build/secrets"
+	"github.com/toalaah/smart-bottle/pkg/crypto"
 )
 
 var (
 	currentFillLevel float32 = 0
-	fillLevelChan            = make(chan []byte, 1)
-	log                      = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	l                        = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	c                *client.GattClient
 )
 
 const (
 	title = "Smart Bottle Connect"
 )
 
-func setupBleClient() error {
-	adapter := bluetooth.DefaultAdapter
-	if err := adapter.Enable(); err != nil {
-		return err
-	}
-	log.Info("enabled adapter", "adapter", adapter)
-
-	devices := make(chan bluetooth.ScanResult, 1)
-	log.Debug("scanning...")
-	err := adapter.Scan(func(adapter *bluetooth.Adapter, result bluetooth.ScanResult) {
-		if result.LocalName() == "" {
-			return
-		}
-		log.Debug("found device", "name", result.LocalName())
-		d := result.ManufacturerData()
-		if result.LocalName() == build.ServiceName /* && len(d) > 0 && d[0].CompanyID == build.ManufacturerUUID */ {
-			log.Debug("device has matching manufacturer UUID", "name", result.LocalName(), "manufacturerData", d[0].CompanyID)
-			devices <- result
-			adapter.StopScan()
-		}
-	})
-
-	result := <-devices
-	log.Debug("connecting to device", "address", result.Address.String())
-	device, err := adapter.Connect(result.Address, bluetooth.ConnectionParams{})
-	if err != nil {
-		return err
-	}
-
-	serviceIDs := []bluetooth.UUID{bluetooth.ServiceUUIDBloodPressure}
-	log.Debug("scanning for matching service", "device", device, "serviceIDs", serviceIDs)
-	svcs, err := device.DiscoverServices(serviceIDs)
-	if err != nil {
-		return err
-	}
-	log.Debug("got services", "device", device, "services", svcs)
-
-	if len(svcs) == 0 {
-		return errors.New("could not find matching service")
-	}
-
-	svc := svcs[0]
-	log.Debug("found service", "service", svc)
-	log.Debug("discovering service characteristics", "id", svc.UUID().String())
-	characteristicIDs := []bluetooth.UUID{bluetooth.CharacteristicUUIDBloodPressureFeature}
-	log.Debug("scanning for matching characteristics", "service", svc.UUID().String(), "characteristicIDs", characteristicIDs)
-	chars, err := svc.DiscoverCharacteristics(characteristicIDs)
-	if err != nil {
-		return err
-	}
-
-	if len(chars) == 0 {
-		return errors.New("could not find matching characteristic")
-	}
-
-	for _, char := range chars {
-		if char.UUID() == build.CharacteristicUUID {
-			log.Info("found characteristic", "uuid", char.UUID().String())
-			char.EnableNotifications(func(buf []byte) {
-				fillLevelChan <- buf
-			})
-			break
-		}
-	}
-
-	return nil
-}
-
 func main() {
-	go func() {
-		for {
-			time.Sleep(time.Millisecond * 100)
-			currentFillLevel += 0.01
-			if currentFillLevel > 1 {
-				currentFillLevel = 0
-			}
-		}
-	}()
+	go setupBleClient()
 	go func() {
 		window := new(app.Window)
 		window.Option(app.Title(title))
-		if err := setupBleClient(); err != nil {
-			log.Error("error while setting up ble client", "error", err)
-			os.Exit(1)
-		}
 		if err := run(window); err != nil {
-			log.Error("error while running main loop", "error", err)
+			l.Error("error while running main loop", "error", err)
 			os.Exit(1)
 		}
 		os.Exit(0)
@@ -140,7 +64,7 @@ func run(window *app.Window) error {
 					if e.State == key.Press {
 						switch e.Name {
 						case "Q", key.NameEscape:
-							log.Info("exiting")
+							l.Info("exiting")
 							return nil
 						}
 					}
@@ -171,11 +95,47 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 		),
 		layout.Rigid(
 			func(gtx layout.Context) layout.Dimensions {
-				fillWidget := material.ProgressCircle(th, currentFillLevel)
+				txt := material.H3(th, fmt.Sprintf("Fill level: %.2f/100%%", currentFillLevel))
+				txt.Alignment = text.Middle
+				txt.Font.Weight = font.Bold
+				return txt.Layout(gtx)
+			},
+		),
+		layout.Rigid(
+			// The height of the spacer is 25 Device independent pixels
+			layout.Spacer{Height: unit.Dp(25)}.Layout,
+		),
+		layout.Rigid(
+			func(gtx layout.Context) layout.Dimensions {
+				fillWidget := material.ProgressCircle(th, currentFillLevel/10)
 				inv := op.InvalidateCmd{At: gtx.Now.Add(time.Second / 25)}
 				gtx.Execute(inv)
 				return fillWidget.Layout(gtx)
 			},
 		),
+		layout.Rigid(
+			// The height of the spacer is 25 Device independent pixels
+			layout.Spacer{Height: unit.Dp(250)}.Layout,
+		),
 	)
+}
+
+func setupBleClient() {
+	c = ble.NewClient(
+		client.WithLogger(l),
+	)
+	if err := c.Init(); err != nil {
+		l.Error("error while setting up ble client", "error", err)
+		os.Exit(1)
+	}
+	for msg := range c.Queue() {
+		l.Debug("received message", "msg", msg)
+		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
+		if err != nil {
+			l.Error("error while decrypting payload", "error", err, "msg", msg)
+			continue
+		}
+		currentFillLevel = math.Float32frombits(binary.LittleEndian.Uint32(raw))
+		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", currentFillLevel)
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/toalaah/smart-bottle/pkg/ble"
+	"github.com/toalaah/smart-bottle/pkg/ble/service"
 	"github.com/toalaah/smart-bottle/pkg/build"
 	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
@@ -34,9 +35,9 @@ func main() {
 	time.Sleep(publishInterval)
 
 	svc := ble.NewService(
-		ble.WithLogger(l),
-		ble.WithAdvertisementInterval(1250*time.Millisecond),
-		ble.WithTXBufferSize(66), // type + length + 64 bytes payload
+		service.WithLogger(l),
+		service.WithAdvertisementInterval(1250*time.Millisecond),
+		service.WithTXBufferSize(66), // type + length + 64 bytes payload
 	)
 	must("initialize BLE service", svc.Init())
 

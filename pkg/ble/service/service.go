@@ -1,4 +1,4 @@
-package ble
+package service
 
 import (
 	"log/slog"
@@ -19,7 +19,7 @@ type GattService struct {
 	txBufSize uint32
 }
 
-func NewService(opts ...ServiceOption) *GattService {
+func New(opts ...ServiceOption) *GattService {
 	s := &GattService{
 		adapter:     bluetooth.DefaultAdapter,
 		txHnd:       bluetooth.Characteristic{},
@@ -133,15 +133,15 @@ func (s *GattService) debug(msg string, args ...any) {
 
 type ServiceOption func(*GattService)
 
-func WithLogger(logger *slog.Logger) ServiceOption {
+func WithLogger(l *slog.Logger) ServiceOption {
 	return func(s *GattService) {
-		s.logger = logger
+		s.logger = l
 	}
 }
 
-func WithAdvertisementInterval(interval time.Duration) ServiceOption {
+func WithAdvertisementInterval(d time.Duration) ServiceOption {
 	return func(s *GattService) {
-		s.advInterval = interval
+		s.advInterval = d
 	}
 }
 

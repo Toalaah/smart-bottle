@@ -7,91 +7,32 @@ import (
 	"math"
 	"os"
 
+	"github.com/toalaah/smart-bottle/pkg/ble"
+	"github.com/toalaah/smart-bottle/pkg/ble/client"
 	"github.com/toalaah/smart-bottle/pkg/build"
 	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
-	"github.com/toalaah/smart-bottle/pkg/transport"
 	"tinygo.org/x/bluetooth"
 )
 
 var (
 	adapter     = bluetooth.DefaultAdapter
 	serviceUUID = build.ServiceUUID
-	log         = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	l           = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	fillLevel   float32
 )
 
 func main() {
-	log.Debug("enabling")
-
-	must("enable BLE stack", adapter.Enable())
-
-	devices := make(chan bluetooth.ScanResult, 1)
-	log.Debug("scanning...")
-	err := adapter.Scan(func(adapter *bluetooth.Adapter, result bluetooth.ScanResult) {
-		if result.LocalName() == "" {
-			return
-		}
-		log.Debug("found device", "name", result.LocalName())
-		d := result.ManufacturerData()
-		if result.LocalName() == build.ServiceName && len(d) > 0 && d[0].CompanyID == build.ManufacturerUUID {
-			log.Debug("device has matching manufacturer UUID", "name", result.LocalName(), "manufacturerData", d[0].CompanyID)
-			devices <- result
-			adapter.StopScan()
-		}
-	})
-
-	result := <-devices
-	log.Debug("connecting to device", "address", result.Address.String())
-	device, err := adapter.Connect(result.Address, bluetooth.ConnectionParams{})
-	must("connect to device", err)
-
-	serviceIDs := []bluetooth.UUID{build.ServiceUUID}
-	log.Debug("scanning for matching service", "device", device, "serviceIDs", serviceIDs)
-	svcs, err := device.DiscoverServices(serviceIDs)
-	must("discover services", err)
-
-	if len(svcs) == 0 {
-		log.Error("could not find any matching service", "device", device, "serviceIDs", serviceIDs)
-		os.Exit(1)
-	}
-
-	svc := svcs[0]
-	log.Debug("found service", "service", svc)
-	log.Debug("discovering service characteristics", "id", svc.UUID().String())
-	characteristicIDs := []bluetooth.UUID{build.CharacteristicUUID}
-	log.Debug("scanning for matching characteristics", "service", svc.UUID().String(), "characteristicIDs", characteristicIDs)
-	chars, err := svc.DiscoverCharacteristics(characteristicIDs)
-	must("discover characteristics", err)
-
-	if len(chars) == 0 {
-		log.Error("could not find characteristic", "service", svc.UUID().String(), "characteristicIDs", characteristicIDs)
-		os.Exit(1)
-	}
-
-	// Setup RX channel
-	rx := make(chan []byte, 1)
-	for _, char := range chars {
-		if char.UUID() == build.CharacteristicUUID {
-			println("found characteristic", char.UUID().String())
-			char.EnableNotifications(func(buf []byte) {
-				rx <- buf
-			})
-			break
-		}
-	}
-
-	// Wait for messages
-	msg := &transport.Message{}
-	for {
-		payload := <-rx
-		log.Debug("received message", "data", fmt.Sprintf("%+v", payload), "length", len(payload))
-		must("unmarshal transport", transport.UnmarshalBytes(msg, payload))
-		log.Debug("parsed message", "payload", fmt.Sprintf("%+v", msg.Value), "length", msg.Length)
-		msg, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
+	c := ble.NewClient(
+		client.WithLogger(l),
+	)
+	must("init BLE client", c.Init())
+	for msg := range c.Queue() {
+		l.Debug("received message", "msg", msg)
+		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
 		must("decrypt", err)
-		fillLevel = math.Float32frombits(binary.LittleEndian.Uint32(msg))
-		log.Debug("decrypted message", "msg", msg, "fillLevel", fillLevel)
+		fillLevel = math.Float32frombits(binary.LittleEndian.Uint32(raw))
+		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", fillLevel)
 	}
 }
 
