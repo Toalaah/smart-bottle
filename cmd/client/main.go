@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/binary"
+	"fmt"
 	"log/slog"
+	"math"
 	"os"
 
 	"github.com/toalaah/smart-bottle/pkg/build"
@@ -15,6 +18,7 @@ var (
 	adapter     = bluetooth.DefaultAdapter
 	serviceUUID = build.ServiceUUID
 	log         = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	fillLevel   float32
 )
 
 func main() {
@@ -78,14 +82,16 @@ func main() {
 	}
 
 	// Wait for messages
-	msgBuf := &transport.Message{}
+	msg := &transport.Message{}
 	for {
 		payload := <-rx
-		log.Debug("received message", "data", payload)
-		transport.UnmarshalBytes(msgBuf, payload)
-		msg, err := crypto.DecryptEphemeralStaticX25519(msgBuf.Value, secrets.UserPrivateKey)
+		log.Debug("received message", "data", fmt.Sprintf("%+v", payload), "length", len(payload))
+		must("unmarshal transport", transport.UnmarshalBytes(msg, payload))
+		log.Debug("parsed message", "payload", fmt.Sprintf("%+v", msg.Value), "length", msg.Length)
+		msg, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
 		must("decrypt", err)
-		log.Debug("decrypted message", "msg", msg)
+		fillLevel = math.Float32frombits(binary.LittleEndian.Uint32(msg))
+		log.Debug("decrypted message", "msg", msg, "fillLevel", fillLevel)
 	}
 }
 

@@ -17,23 +17,26 @@ import (
 	"github.com/toalaah/smart-bottle/pkg/transport"
 )
 
+var (
+	l               *slog.Logger = nil
+	fillLevel       float32
+	err             error
+	buf             = make([]byte, 4)
+	publishInterval = time.Second * 3
+	msg             = &transport.Message{Type: transport.WaterLevel}
+)
+
 func main() {
-	var (
-		l         *slog.Logger = nil
-		fillLevel float32
-		err       error
-		buf       []byte = make([]byte, 4)
-	)
 	if build.Debug {
 		cdc.EnableUSBCDC()
 		l = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
+	time.Sleep(publishInterval)
 
-	time.Sleep(time.Second * 3)
 	svc := ble.NewService(
-		// ble.WithLogger(l),
+		ble.WithLogger(l),
 		ble.WithAdvertisementInterval(1250*time.Millisecond),
-		ble.WithTXBufferSize(64),
+		ble.WithTXBufferSize(66), // type + length + 64 bytes payload
 	)
 	must("initialize BLE service", svc.Init())
 
@@ -42,24 +45,23 @@ func main() {
 	)
 	must("initialize depth sensor", depthSensor.Init())
 
-	msg := &transport.Message{
-		Type: transport.WaterLevel,
-	}
 	for {
-		time.Sleep(time.Second * 3)
+		time.Sleep(publishInterval)
+
 		fillLevel, err = depthSensor.Read()
 		if err != nil {
-			println("error", err)
+			l.Error("error reading fill level", "error", err)
+		} else {
+			l.Debug("read fill level", "level", fillLevel)
 		}
-		l.Debug("read water level", "level", fillLevel)
+
 		binary.LittleEndian.PutUint32(buf, math.Float32bits(fillLevel))
-		// l.Debug("wrote float to buf", "level", fillLevel, "buf", buf)
 		cipher, err := crypto.EncryptEphemeralStaticX25519(buf, secrets.UserPublicKey)
 		must("encrypt", err)
+
 		msg.Load(cipher)
 		must("send successfully", svc.SendMessage(msg))
 	}
-
 }
 
 func must(msg string, err error) {

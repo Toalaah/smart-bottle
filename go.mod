@@ -4,7 +4,6 @@ go 1.24.2
 
 require (
 	gioui.org v0.8.0
-	github.com/ajstarks/giocanvas v0.0.0-20250507024357-01a7ed1cd332
 	golang.org/x/crypto v0.33.0
 	tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1
 )

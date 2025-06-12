@@ -110,8 +110,8 @@ func (s *GattService) Init() error {
 }
 
 func (s *GattService) SendMessage(m *transport.Message) error {
-	s.debug("writing value", "handle", s.txHnd, "length", m.Length)
-	if _, err := s.txHnd.Write(append([]byte{m.Length}, m.Value...)); err != nil {
+	s.debug("writing value", "handle", s.txHnd, "length", 2+m.Length)
+	if _, err := s.txHnd.Write(append([]byte{uint8(m.Type), m.Length}, m.Value...)); err != nil {
 		return err
 	}
 	return nil
