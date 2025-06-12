@@ -8,18 +8,20 @@ import (
 )
 
 type DepthSensorService struct {
-	logger *slog.Logger
-	u      *machine.UART
-	d      time.Duration
-	buf    []byte
+	logger          *slog.Logger
+	u               *machine.UART
+	d               time.Duration
+	buf             []byte
+	maxReadAttempts uint8
 }
 
 func NewDepthSensorService(opts ...DepthSensorServiceOption) *DepthSensorService {
 	s := &DepthSensorService{
-		logger: nil,
-		u:      machine.DefaultUART,
-		d:      time.Millisecond * 100,
-		buf:    make([]byte, 4),
+		logger:          nil,
+		u:               machine.DefaultUART,
+		d:               time.Millisecond * 100,
+		buf:             make([]byte, 4),
+		maxReadAttempts: 10,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -34,15 +36,21 @@ func (s *DepthSensorService) Init() error {
 }
 
 func (s *DepthSensorService) Read() (float32, error) {
+	i := s.maxReadAttempts
 	s.debug("reading from depth sensor")
 	// read 4 bytes (w/ offset marker of 0xff)
-	for {
+	for i > 0 {
+		i = i - 1
 		s.u.Read(s.buf)
 		b, _ := s.u.ReadByte()
 		if b != 0xff && s.buf[0] == 0xff {
 			break
 		}
 		time.Sleep(s.d)
+	}
+
+	if i <= 0 {
+		return 0, fmt.Errorf("too many failed attempts reading")
 	}
 
 	s.debug("read packet", "value", s.buf)
@@ -72,6 +80,12 @@ type DepthSensorServiceOption func(*DepthSensorService)
 func WithRetryDelay(d time.Duration) DepthSensorServiceOption {
 	return func(s *DepthSensorService) {
 		s.d = d
+	}
+}
+
+func WithMaxReadAttempts(i uint8) DepthSensorServiceOption {
+	return func(s *DepthSensorService) {
+		s.maxReadAttempts = i
 	}
 }
 
