@@ -107,12 +107,14 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 		),
 		layout.Rigid(
 			func(gtx layout.Context) layout.Dimensions {
-				fillWidget := material.ProgressCircle(th, currentFillLevel/10)
-				inv := op.InvalidateCmd{At: gtx.Now.Add(time.Second / 25)}
-				gtx.Execute(inv)
-				return fillWidget.Layout(gtx)
-			},
-		),
+				inset := layout.Inset{Left: 200, Right: 200}
+				return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					fillWidget := material.ProgressCircle(th, currentFillLevel/100)
+					inv := op.InvalidateCmd{At: gtx.Now.Add(time.Second / 25)}
+					gtx.Execute(inv)
+					return fillWidget.Layout(gtx)
+				})
+			}),
 		layout.Rigid(
 			// The height of the spacer is 25 Device independent pixels
 			layout.Spacer{Height: unit.Dp(250)}.Layout,
