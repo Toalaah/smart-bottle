@@ -45,6 +45,11 @@ const (
 func main() {
 	go setupBleClient()
 	go func() {
+		defer func() {
+			if c != nil {
+				_ = c.Disconnect()
+			}
+		}()
 		window := new(app.Window)
 		window.Option(app.Title(title))
 		if err := run(window); err != nil {
