@@ -37,12 +37,14 @@ func main() {
 	svc := ble.NewService(
 		service.WithLogger(l),
 		service.WithAdvertisementInterval(1250*time.Millisecond),
-		service.WithTXBufferSize(66), // type + length + 64 bytes payload
+		service.WithTXBufferSize(66), // Type + length + 64 bytes payload
 	)
 	must("initialize BLE service", svc.Init())
 
 	depthSensor := sensor.NewDepthSensorService(
 		sensor.WithLogger(l),
+		sensor.WithMaxReadAttempts(200), // Total read timeout of 20 seconds.
+		sensor.WithRetryDelay(time.Millisecond*100),
 	)
 	must("initialize depth sensor", depthSensor.Init())
 

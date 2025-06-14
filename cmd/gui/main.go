@@ -25,9 +25,16 @@ import (
 )
 
 var (
-	currentFillLevel float32 = 0
-	l                        = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	c                *client.GattClient
+	currentFillLevel      float32            = 0
+	currentFillPercentage float32            = 0
+	l                                        = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	c                     *client.GattClient = nil
+)
+
+// Change according to height of water bottle
+var (
+	bottleDepthMax float32 = 7.4 // Empty
+	bottleDepthMin float32 = 3.2 // Full
 )
 
 const (
@@ -95,7 +102,7 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 		),
 		layout.Rigid(
 			func(gtx layout.Context) layout.Dimensions {
-				txt := material.H3(th, fmt.Sprintf("Fill level: %.2f/100%%", currentFillLevel))
+				txt := material.H3(th, fmt.Sprintf("Fill level: %.2f/100%%", currentFillPercentage*100))
 				txt.Alignment = text.Middle
 				txt.Font.Weight = font.Bold
 				return txt.Layout(gtx)
@@ -109,7 +116,7 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 			func(gtx layout.Context) layout.Dimensions {
 				inset := layout.Inset{Left: 200, Right: 200}
 				return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					fillWidget := material.ProgressCircle(th, currentFillLevel/100)
+					fillWidget := material.ProgressCircle(th, currentFillPercentage)
 					inv := op.InvalidateCmd{At: gtx.Now.Add(time.Second / 25)}
 					gtx.Execute(inv)
 					return fillWidget.Layout(gtx)
@@ -137,7 +144,20 @@ func setupBleClient() {
 			l.Error("error while decrypting payload", "error", err, "msg", msg)
 			continue
 		}
-		currentFillLevel = math.Float32frombits(binary.LittleEndian.Uint32(raw))
-		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", currentFillLevel)
+		d := math.Float32frombits(binary.LittleEndian.Uint32(raw))
+		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", d)
+		currentFillPercentage = getFillPercentageFromDepth(d)
+		currentFillLevel = d
 	}
+}
+
+func getFillPercentageFromDepth(d float32) float32 {
+	if d < bottleDepthMin || d > bottleDepthMax { // Assume failed/invalid reading, if so we just reuse the last fill level
+		d = currentFillLevel
+	}
+	if d == 0 {
+		return 0
+	}
+	// For the sake of simplicity we assume a linear relationship, that is that the bottle is a perfect cylinder
+	return (d - bottleDepthMin) / (bottleDepthMax - bottleDepthMin)
 }
