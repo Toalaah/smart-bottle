@@ -5,7 +5,7 @@ go 1.24.2
 require (
 	gioui.org v0.8.0
 	golang.org/x/crypto v0.33.0
-	tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1
+	tinygo.org/x/bluetooth v0.11.1-0.20250613143449-33613a1f5a75
 )
 
 require (
@@ -15,7 +15,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/saltosystems/winrt-go v0.0.0-20240509164145-4f7860a3bd2b // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	github.com/soypat/cyw43439 v0.0.0-20250222151126-af3e63a269de // indirect
+	github.com/soypat/cyw43439 v0.0.0-20250505012923-830110c8f4af // indirect
 	github.com/soypat/seqs v0.0.0-20250124201400-0d65bc7c1710 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tinygo-org/cbgo v0.0.4 // indirect
@@ -26,7 +26,3 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 )
-
-replace github.com/soypat/cyw43439 => github.com/soypat/cyw43439 v0.0.0-20250322192939-ffedeab80a50
-
-replace tinygo.org/x/bluetooth => tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1 // indirect

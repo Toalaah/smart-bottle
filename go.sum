@@ -24,8 +24,8 @@ github.com/saltosystems/winrt-go v0.0.0-20240509164145-4f7860a3bd2b/go.mod h1:CI
 github.com/sirupsen/logrus v1.5.0/go.mod h1:+F7Ogzej0PZc/94MaYx/nvG9jOFMD2osvC3s+Squfpo=
 github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
 github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-github.com/soypat/cyw43439 v0.0.0-20250322192939-ffedeab80a50 h1:PgHnB1SZUXV6HuaM9XLddb3xsnOtx4JrfpDZpmuYQ68=
-github.com/soypat/cyw43439 v0.0.0-20250322192939-ffedeab80a50/go.mod h1:MUaGO5m6X7xrkHrPDmnaxCEcuCCFN/0ZFh9oie+exbU=
+github.com/soypat/cyw43439 v0.0.0-20250505012923-830110c8f4af h1:ZfFq94aH/BCSWWKd9RPUgdHOdgGKCnfl2VdvU9UksTA=
+github.com/soypat/cyw43439 v0.0.0-20250505012923-830110c8f4af/go.mod h1:MUaGO5m6X7xrkHrPDmnaxCEcuCCFN/0ZFh9oie+exbU=
 github.com/soypat/seqs v0.0.0-20250124201400-0d65bc7c1710 h1:Y9fBuiR/urFY/m76+SAZTxk2xAOS2n85f+H1CugajeA=
 github.com/soypat/seqs v0.0.0-20250124201400-0d65bc7c1710/go.mod h1:oCVCNGCHMKoBj97Zp9znLbQ1nHxpkmOY9X+UAGzOxc8=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
@@ -56,5 +56,5 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
-tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1 h1:RPKWLXhoNfL3wKJYmHAEYLXFVaKu1Kj8TFTsxJS6LgE=
-tinygo.org/x/bluetooth v0.11.1-0.20250505124847-38847b0d22b1/go.mod h1:/l+WXqcrFRlM4bYzJpO9Krb9G9oLeHNmtpStN2hEV2I=
+tinygo.org/x/bluetooth v0.11.1-0.20250613143449-33613a1f5a75 h1:8OQyFedIOcAJVwrrRpQXgDMoaRM98rdHT1Tw3d80asE=
+tinygo.org/x/bluetooth v0.11.1-0.20250613143449-33613a1f5a75/go.mod h1:6+y5kVUN6tU7wtJj+qrcFJEVhas4/bIDhGNqvENmT74=
