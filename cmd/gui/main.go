@@ -20,6 +20,7 @@ import (
 	"gioui.org/widget/material"
 	"github.com/toalaah/smart-bottle/pkg/ble"
 	"github.com/toalaah/smart-bottle/pkg/ble/client"
+	"github.com/toalaah/smart-bottle/pkg/build"
 	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
 )
@@ -102,7 +103,7 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 		),
 		layout.Rigid(
 			func(gtx layout.Context) layout.Dimensions {
-				txt := material.H3(th, fmt.Sprintf("Fill level: %.2f/100%%", currentFillPercentage*100))
+				txt := material.H3(th, fmt.Sprintf("Fill level: %.2f%%", currentFillPercentage*100))
 				txt.Alignment = text.Middle
 				txt.Font.Weight = font.Bold
 				return txt.Layout(gtx)
@@ -135,6 +136,11 @@ func setupBleClient() {
 	)
 	if err := c.Init(); err != nil {
 		l.Error("error while setting up ble client", "error", err)
+		os.Exit(1)
+	}
+	// TODO: make this an interactive entry in the GUI
+	if err := c.Auth(build.UserPin); err != nil {
+		l.Error("auth error", "error", err)
 		os.Exit(1)
 	}
 	for msg := range c.Queue() {

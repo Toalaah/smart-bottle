@@ -37,7 +37,7 @@ func (s *DepthSensorService) Init() error {
 
 func (s *DepthSensorService) Read() (float32, error) {
 	i := s.maxReadAttempts
-	s.debug("reading from depth sensor")
+	s.debug("reading from sensor")
 	// read 4 bytes (w/ offset marker of 0xff)
 	for i != 0 {
 		s.u.Read(s.buf)

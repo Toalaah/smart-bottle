@@ -10,7 +10,9 @@ const (
 )
 
 var (
-	ServiceUUID               = bluetooth.New32BitUUID(0xdeadbeef)
-	CharacteristicUUID        = bluetooth.New32BitUUID(0xcafebabe)
-	ManufacturerUUID   uint16 = 0xc001
+	ServiceUUID                 = bluetooth.New32BitUUID(0xdeadbeef)
+	CharacteristicUUIDFillLevel = bluetooth.New32BitUUID(0xcafebabe)
+	CharacteristicUUIDAuth      = bluetooth.New32BitUUID(0xfefefefe)
+	ManufacturerUUID            = uint16(0xc001)
+	UserPin                     = []byte{1, 3, 3, 7}
 )

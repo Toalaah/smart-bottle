@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -15,17 +17,21 @@ type GattService struct {
 	logger      *slog.Logger
 	advInterval time.Duration
 
-	txHnd     bluetooth.Characteristic
-	txBufSize uint32
+	txHnd, authHnd               bluetooth.Characteristic
+	txBufSize, authKeySize       uint32
+	authEnabled, didAuthenticate bool
 }
 
 func New(opts ...ServiceOption) *GattService {
 	s := &GattService{
-		adapter:     bluetooth.DefaultAdapter,
-		txHnd:       bluetooth.Characteristic{},
-		logger:      nil,
-		advInterval: 1000 * time.Millisecond,
-		txBufSize:   128,
+		adapter:         bluetooth.DefaultAdapter,
+		txHnd:           bluetooth.Characteristic{},
+		logger:          nil,
+		advInterval:     1000 * time.Millisecond,
+		txBufSize:       128,
+		authKeySize:     uint32(len(build.UserPin)),
+		authEnabled:     false,
+		didAuthenticate: false,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -67,12 +73,31 @@ func (s *GattService) Init() error {
 			Characteristics: []bluetooth.CharacteristicConfig{
 				{
 					Handle: &s.txHnd,
-					UUID:   build.CharacteristicUUID,
+					UUID:   build.CharacteristicUUIDFillLevel,
 					Value:  make([]byte, s.txBufSize),
 					Flags:  bluetooth.CharacteristicReadPermission | bluetooth.CharacteristicNotifyPermission,
 				},
 			},
 		},
+	}
+
+	if s.authEnabled {
+		services[1].Characteristics = append(services[1].Characteristics, bluetooth.CharacteristicConfig{
+			Handle: &s.authHnd,
+			UUID:   build.CharacteristicUUIDAuth,
+			Value:  make([]byte, s.authKeySize),
+			Flags:  bluetooth.CharacteristicWritePermission | bluetooth.CharacteristicWriteWithoutResponsePermission,
+			WriteEvent: func(client bluetooth.Connection, offset int, value []byte) {
+				s.debug("received write event", "value", fmt.Sprintf("%+v", value))
+				if l := len(value); l != int(s.authKeySize) {
+					s.debug("auth key has unexpected length", "length", l)
+				}
+				if bytes.Compare(value, build.UserPin) == 0 {
+					s.debug("auth succeeded")
+					s.didAuthenticate = true
+				}
+			},
+		})
 	}
 
 	for _, service := range services {
@@ -110,6 +135,10 @@ func (s *GattService) Init() error {
 }
 
 func (s *GattService) SendMessage(m *transport.Message) error {
+	if !s.didAuthenticate && s.authEnabled {
+		s.debug("no authentication handshake has taken place, skipping sending message")
+		return nil
+	}
 	s.debug("writing value", "handle", s.txHnd, "length", 2+m.Length)
 	if _, err := s.txHnd.Write(append([]byte{uint8(m.Type), m.Length}, m.Value...)); err != nil {
 		return err
@@ -148,5 +177,17 @@ func WithAdvertisementInterval(d time.Duration) ServiceOption {
 func WithTXBufferSize(n uint32) ServiceOption {
 	return func(s *GattService) {
 		s.txBufSize = n
+	}
+}
+
+func WithAuth(enable bool) ServiceOption {
+	return func(s *GattService) {
+		s.authEnabled = enable
+	}
+}
+
+func WithAuthKeySize(n uint32) ServiceOption {
+	return func(s *GattService) {
+		s.authKeySize = n
 	}
 }

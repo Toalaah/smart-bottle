@@ -13,6 +13,9 @@ type GattClient struct {
 	adapter *bluetooth.Adapter
 	logger  *slog.Logger
 	c       chan transport.Message
+
+	rxChar, authChar *bluetooth.DeviceCharacteristic
+	device           bluetooth.Device
 }
 
 func New(opts ...ClientOption) *GattClient {
@@ -51,15 +54,15 @@ func (s *GattClient) Init() error {
 	}
 
 	result := <-devices
-	s.debug("connecting to device", "address", result.Address.String())
-	device, err := s.adapter.Connect(result.Address, bluetooth.ConnectionParams{})
+	s.debug("connecting to device", "address", s.device.Address.String())
+	s.device, err = s.adapter.Connect(result.Address, bluetooth.ConnectionParams{})
 	if err != nil {
 		return err
 	}
 
 	serviceIDs := []bluetooth.UUID{build.ServiceUUID}
-	s.debug("scanning for matching service", "device", device, "serviceIDs", serviceIDs)
-	svcs, err := device.DiscoverServices(serviceIDs)
+	s.debug("scanning for matching service", "device", s.device, "serviceIDs", serviceIDs)
+	svcs, err := s.device.DiscoverServices(serviceIDs)
 	if err != nil {
 		return err
 	}
@@ -70,7 +73,7 @@ func (s *GattClient) Init() error {
 	svc := svcs[0]
 	s.debug("found service", "service", svc)
 	s.debug("discovering service characteristics", "id", svc.UUID().String())
-	characteristicIDs := []bluetooth.UUID{build.CharacteristicUUID}
+	characteristicIDs := []bluetooth.UUID{build.CharacteristicUUIDFillLevel, build.CharacteristicUUIDAuth}
 	s.debug("scanning for matching characteristics", "service", svc.UUID().String(), "characteristicIDs", characteristicIDs)
 
 	chars, err := svc.DiscoverCharacteristics(characteristicIDs)
@@ -82,21 +85,43 @@ func (s *GattClient) Init() error {
 	}
 
 	for _, char := range chars {
-		if char.UUID() == build.CharacteristicUUID {
-			s.debug("found characteristic", "characteristicID", char.UUID().String())
-			char.EnableNotifications(func(p []byte) {
-				msg := transport.Message{}
-				if err := transport.UnmarshalBytes(&msg, p); err != nil {
-					panic(err)
-				}
-				s.c <- msg
-			})
-			s.debug("enabled notifications on characteristic", "characteristicID", char.UUID().String())
-			break
+		switch char.UUID() {
+		case build.CharacteristicUUIDFillLevel:
+			s.debug("found fill level characteristic", "characteristicID", char.UUID().String())
+			s.rxChar = &char
+		case build.CharacteristicUUIDAuth:
+			s.debug("found auth characteristic", "characteristicID", char.UUID().String())
+			s.authChar = &char
 		}
 	}
 
+	if s.rxChar == nil || s.authChar == nil {
+		return fmt.Errorf("could not discover all required characteristics")
+	}
+
+	s.rxChar.EnableNotifications(func(p []byte) {
+		msg := transport.Message{}
+		if err := transport.UnmarshalBytes(&msg, p); err != nil {
+			panic(err)
+		}
+		s.c <- msg
+	})
+
 	return nil
+}
+
+func (s *GattClient) Auth(pin []byte) error {
+	s.debug("performing authentication", "pin", fmt.Sprintf("%+v", pin))
+	if s.authChar == nil {
+		return fmt.Errorf("auth characteristic is nil")
+	}
+	_, err := s.authChar.WriteWithoutResponse(pin)
+	return err
+}
+
+func (s *GattClient) Disconnect() error {
+	s.debug("performing disconnect", "device", s.device)
+	return s.device.Disconnect()
 }
 
 func (s *GattClient) Queue() chan transport.Message {

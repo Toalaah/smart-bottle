@@ -38,6 +38,7 @@ func main() {
 		service.WithLogger(l),
 		service.WithAdvertisementInterval(1250*time.Millisecond),
 		service.WithTXBufferSize(66), // Type + length + 64 bytes payload
+		service.WithAuth(true),
 	)
 	must("initialize BLE service", svc.Init())
 
