@@ -91,6 +91,6 @@ func WithMaxReadAttempts(i int) DepthSensorServiceOption {
 
 func WithLogger(logger *slog.Logger) DepthSensorServiceOption {
 	return func(s *DepthSensorService) {
-		s.logger = logger
+		s.logger = logger.With("service", "sensor")
 	}
 }

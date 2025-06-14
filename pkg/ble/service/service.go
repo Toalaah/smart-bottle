@@ -164,7 +164,7 @@ type ServiceOption func(*GattService)
 
 func WithLogger(l *slog.Logger) ServiceOption {
 	return func(s *GattService) {
-		s.logger = l
+		s.logger = l.With("service", "gatt")
 	}
 }
 
