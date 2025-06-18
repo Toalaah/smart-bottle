@@ -34,8 +34,8 @@ var (
 
 // Change according to height of water bottle
 var (
-	bottleDepthMax float32 = 7.4 // Empty
-	bottleDepthMin float32 = 3.2 // Full
+	bottleDepthMax float32 = 14.399 // Empty
+	bottleDepthMin float32 = 3.700  // Full
 )
 
 const (
@@ -163,11 +163,11 @@ func setupBleClient() {
 }
 
 func getFillPercentageFromDepth(d float32) float32 {
-	if d < bottleDepthMin || d > bottleDepthMax { // Assume failed/invalid reading, if so we just reuse the last fill level
-		d = currentFillLevel
-	}
-	if d == 0 {
+	if d >= bottleDepthMax {
 		return 0
+	}
+	if d <= bottleDepthMin {
+		return 1
 	}
 	// For the sake of simplicity we assume a linear relationship, that is that the bottle is a perfect cylinder
 	return (d - bottleDepthMin) / (bottleDepthMax - bottleDepthMin)

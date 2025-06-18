@@ -19,7 +19,7 @@ var (
 	adapter     = bluetooth.DefaultAdapter
 	serviceUUID = build.ServiceUUID
 	l           = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	fillLevel   float32
+	depth       float32
 )
 
 func main() {
@@ -27,12 +27,13 @@ func main() {
 		client.WithLogger(l),
 	)
 	must("init BLE client", c.Init())
+	must("authenticate", c.Auth(build.UserPin))
 	for msg := range c.Queue() {
 		l.Debug("received message", "msg", msg)
 		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
 		must("decrypt", err)
-		fillLevel = math.Float32frombits(binary.LittleEndian.Uint32(raw))
-		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", fillLevel)
+		depth = math.Float32frombits(binary.LittleEndian.Uint32(raw))
+		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "depth", depth)
 	}
 }
 
