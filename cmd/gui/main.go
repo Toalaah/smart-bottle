@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"image/color"
@@ -17,10 +18,10 @@ import (
 	"gioui.org/op"
 	"gioui.org/text"
 	"gioui.org/unit"
+	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"github.com/toalaah/smart-bottle/pkg/ble"
 	"github.com/toalaah/smart-bottle/pkg/ble/client"
-	"github.com/toalaah/smart-bottle/pkg/build"
 	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
 )
@@ -30,6 +31,20 @@ var (
 	currentFillPercentage float32            = 0
 	l                                        = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	c                     *client.GattClient = nil
+
+	connectButton = new(widget.Clickable)
+	authKeyBuf    = new(bytes.Buffer)
+	editor        = &widget.Editor{
+		Submit:     true,
+		ReadOnly:   false,
+		SingleLine: true,
+		Mask:       '*',
+	}
+)
+
+type (
+	C = layout.Context
+	D = layout.Dimensions
 )
 
 // Change according to height of water bottle
@@ -83,7 +98,7 @@ func run(window *app.Window) error {
 					}
 				}
 			}
-			ops.Reset()
+			// ops.Reset()
 			gtx := app.NewContext(&ops, e)
 			drawLayout(gtx, theme)
 			e.Frame(gtx.Ops)
@@ -91,10 +106,11 @@ func run(window *app.Window) error {
 	}
 }
 
-func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
+func drawLayout(gtx C, th *material.Theme) D {
+
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 		layout.Rigid(
-			func(gtx layout.Context) layout.Dimensions {
+			func(gtx C) D {
 				title := material.H2(th, "Smart Bottle Tracker")
 				black := color.NRGBA{R: 0, G: 0, B: 0, A: 255}
 				title.Color = black
@@ -107,7 +123,7 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 			layout.Spacer{Height: unit.Dp(25)}.Layout,
 		),
 		layout.Rigid(
-			func(gtx layout.Context) layout.Dimensions {
+			func(gtx C) D {
 				txt := material.H3(th, fmt.Sprintf("Fill level: %.2f%%", currentFillPercentage*100))
 				txt.Alignment = text.Middle
 				txt.Font.Weight = font.Bold
@@ -119,9 +135,55 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 			layout.Spacer{Height: unit.Dp(25)}.Layout,
 		),
 		layout.Rigid(
-			func(gtx layout.Context) layout.Dimensions {
+			func(gtx C) D {
+				for {
+					if _, ok := editor.Update(gtx); !ok {
+						break
+					}
+				}
+				inset := layout.Inset{Left: unit.Dp(200), Right: unit.Dp(200)}
+				e := material.Editor(th, editor, "Auth PIN")
+				e.Font.Style = font.Italic
+				border := widget.Border{Color: color.NRGBA{A: 0x7f}, CornerRadius: unit.Dp(0), Width: unit.Dp(2)}
+				return inset.Layout(gtx, func(gtx C) D {
+					return border.Layout(gtx, e.Layout)
+				})
+			},
+		),
+		layout.Rigid(
+			// The height of the spacer is 25 Device independent pixels
+			layout.Spacer{Height: unit.Dp(25)}.Layout,
+		),
+		layout.Rigid(
+			// The height of the spacer is 25 Device independent pixels
+			func(gtx C) D {
+				inset := layout.Inset{Left: unit.Dp(200), Right: unit.Dp(200)}
+				for connectButton.Clicked(gtx) {
+					contents := editor.Text()
+					authKeyBuf.Reset()
+					for _, c := range contents {
+						n := uint8(c) - 48
+						authKeyBuf.WriteByte(n)
+					}
+					l.Info("click registered", "key", fmt.Sprintf("%+v", authKeyBuf.Bytes()))
+					go authBleClient()
+				}
+				return inset.Layout(gtx, func(gtx C) D {
+					return material.Button(th, connectButton, "Connect").Layout(gtx)
+				})
+			},
+		),
+		layout.Rigid(
+			// The height of the spacer is 25 Device independent pixels
+			layout.Spacer{Height: unit.Dp(25)}.Layout,
+		),
+		layout.Rigid(
+			func(gtx C) D {
 				inset := layout.Inset{Left: 200, Right: 200}
-				return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return inset.Layout(gtx, func(gtx C) D {
+					if currentFillPercentage == 0 {
+						return layout.Dimensions{}
+					}
 					fillWidget := material.ProgressCircle(th, currentFillPercentage)
 					inv := op.InvalidateCmd{At: gtx.Now.Add(time.Second / 25)}
 					gtx.Execute(inv)
@@ -135,6 +197,16 @@ func drawLayout(gtx layout.Context, th *material.Theme) layout.Dimensions {
 	)
 }
 
+func authBleClient() {
+	for c == nil {
+		l.Info("ble client not initialized, waiting to auth")
+		time.Sleep(time.Second)
+	}
+	if err := c.Auth(authKeyBuf.Bytes()); err != nil {
+		l.Error("auth error", "error", err)
+	}
+}
+
 func setupBleClient() {
 	c = ble.NewClient(
 		client.WithLogger(l),
@@ -143,11 +215,7 @@ func setupBleClient() {
 		l.Error("error while setting up ble client", "error", err)
 		os.Exit(1)
 	}
-	// TODO: make this an interactive entry in the GUI
-	if err := c.Auth(build.UserPin); err != nil {
-		l.Error("auth error", "error", err)
-		os.Exit(1)
-	}
+
 	for msg := range c.Queue() {
 		l.Debug("received message", "msg", msg)
 		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
