@@ -20,6 +20,8 @@ type GattService struct {
 	txHnd, authHnd               bluetooth.Characteristic
 	txBufSize, authKeySize       uint32
 	authEnabled, didAuthenticate bool
+
+	connectedDevice chan bluetooth.Device
 }
 
 func New(opts ...ServiceOption) *GattService {
@@ -32,6 +34,7 @@ func New(opts ...ServiceOption) *GattService {
 		authKeySize:     uint32(len(build.UserPin)),
 		authEnabled:     false,
 		didAuthenticate: false,
+		connectedDevice: make(chan bluetooth.Device, 1),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -49,6 +52,30 @@ func (s *GattService) Init() error {
 		return err
 	}
 	s.debug("have adapter address", "address", mac)
+
+	s.adapter.SetConnectHandler(func(device bluetooth.Device, connected bool) {
+		if connected {
+			s.debug("new device connection", "state", connected, "device", device)
+			select {
+			case s.connectedDevice <- device:
+			default:
+			}
+		} else {
+			s.debug("resetting auth")
+			s.didAuthenticate = false
+		}
+	})
+
+	go func() {
+		for device := range s.connectedDevice {
+			time.Sleep(time.Second * 5)
+			device.RequestConnectionParams(bluetooth.ConnectionParams{
+				MinInterval: bluetooth.NewDuration(495 * time.Millisecond),
+				MaxInterval: bluetooth.NewDuration(510 * time.Millisecond),
+				Timeout:     bluetooth.NewDuration(5 * time.Second),
+			})
+		}
+	}()
 
 	services := []bluetooth.Service{
 		// Device/vendor information
