@@ -31,6 +31,8 @@ var (
 	currentFillPercentage float32            = 0
 	l                                        = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	c                     *client.GattClient = nil
+	isConnected           bool               = true
+	isAuthed              bool               = true
 
 	connectButton = new(widget.Clickable)
 	authKeyBuf    = new(bytes.Buffer)
@@ -61,7 +63,7 @@ func main() {
 	go setupBleClient()
 	go func() {
 		defer func() {
-			if c != nil {
+			if c != nil && isConnected {
 				_ = c.Disconnect()
 			}
 		}()
@@ -136,6 +138,9 @@ func drawLayout(gtx C, th *material.Theme) D {
 		),
 		layout.Rigid(
 			func(gtx C) D {
+				if isAuthed && isConnected {
+					return D{}
+				}
 				for {
 					if _, ok := editor.Update(gtx); !ok {
 						break
@@ -159,6 +164,15 @@ func drawLayout(gtx C, th *material.Theme) D {
 			func(gtx C) D {
 				inset := layout.Inset{Left: unit.Dp(200), Right: unit.Dp(200)}
 				for connectButton.Clicked(gtx) {
+					if isConnected {
+						l.Info("disconnecting")
+						if c != nil {
+							c.Disconnect()
+						}
+						isConnected = false
+						isAuthed = false
+						break
+					}
 					contents := editor.Text()
 					authKeyBuf.Reset()
 					for _, c := range contents {
@@ -169,7 +183,11 @@ func drawLayout(gtx C, th *material.Theme) D {
 					go authBleClient()
 				}
 				return inset.Layout(gtx, func(gtx C) D {
-					return material.Button(th, connectButton, "Connect").Layout(gtx)
+					s := "Connect"
+					if isConnected {
+						s = "Disconnect"
+					}
+					return material.Button(th, connectButton, s).Layout(gtx)
 				})
 			},
 		),
@@ -198,13 +216,17 @@ func drawLayout(gtx C, th *material.Theme) D {
 }
 
 func authBleClient() {
-	for c == nil {
+	for c == nil && !isConnected {
 		l.Info("ble client not initialized, waiting to auth")
 		time.Sleep(time.Second)
+		if isAuthed {
+			return
+		}
 	}
 	if err := c.Auth(authKeyBuf.Bytes()); err != nil {
 		l.Error("auth error", "error", err)
 	}
+	isAuthed = true
 }
 
 func setupBleClient() {
@@ -216,6 +238,7 @@ func setupBleClient() {
 		os.Exit(1)
 	}
 
+	isConnected = true
 	for msg := range c.Queue() {
 		l.Debug("received message", "msg", msg)
 		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)

@@ -121,6 +121,9 @@ func (s *GattClient) Auth(pin []byte) error {
 
 func (s *GattClient) Disconnect() error {
 	s.debug("performing disconnect", "device", s.device)
+	if s.device.Address == (bluetooth.Address{}) {
+		return fmt.Errorf("device is nil")
+	}
 	return s.device.Disconnect()
 }
 

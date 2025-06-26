@@ -1,6 +1,7 @@
 {pkgs ? (import <nixpkgs> { config.allowUnfree = true; })}:
 with pkgs;
-  mkShell {
+  stdenvNoCC.mkDerivation {
+    name = "shell";
     buildInputs = [
       bluez
       golangci-lint

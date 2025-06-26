@@ -15,9 +15,13 @@ generate: ## Generate build secrets
 	@go generate ./...
 .PHONY: generate
 
-build-client: generate ## Build desktop client
-	@go build ./cmd/client
+build-client: generate ## Build desktop GUI client
+	@go build ./cmd/gui
 .PHONY: build-client
+
+build-client-headless: generate ## Build headless desktop client
+	@go build ./cmd/client
+.PHONY: build-client-headless
 
 build: generate ## Build firmware
 	@tinygo build -target=$(TARGET) -tags $(TAGS) $(FLAGS) -o main.elf $(PROG)
