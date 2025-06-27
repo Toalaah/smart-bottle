@@ -9,7 +9,7 @@ class Token(BaseModel):
 
 class Reading(BaseModel):
     timestamp: datetime.datetime
-    value: int
+    value: float
 
 
 class ReadingResponse(BaseModel):

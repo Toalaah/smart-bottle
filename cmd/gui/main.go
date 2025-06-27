@@ -31,8 +31,9 @@ var (
 	currentFillPercentage float32            = 0
 	l                                        = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	c                     *client.GattClient = nil
-	isConnected           bool               = true
-	isAuthed              bool               = true
+	isConnected           bool               = false
+	isAuthed              bool               = false
+	readings              ReadingsResponse
 
 	connectButton = new(widget.Clickable)
 	authKeyBuf    = new(bytes.Buffer)
@@ -60,6 +61,20 @@ const (
 )
 
 func main() {
+	l.Debug("obtaining access token")
+	err := Login()
+	if err != nil {
+		l.Error("failed to obtain access token", "error", err)
+	}
+
+	l.Debug("obtaining readings from api")
+	r, err := GetReadings()
+	readings = r
+	if err != nil {
+		l.Error("failed to obtain readings", "error", err)
+	}
+	l.Debug("got readings", "readings", readings)
+
 	go setupBleClient()
 	go func() {
 		defer func() {
@@ -200,12 +215,38 @@ func drawLayout(gtx C, th *material.Theme) D {
 				inset := layout.Inset{Left: 200, Right: 200}
 				return inset.Layout(gtx, func(gtx C) D {
 					if currentFillPercentage == 0 {
-						return layout.Dimensions{}
+						return D{}
 					}
 					fillWidget := material.ProgressCircle(th, currentFillPercentage)
 					inv := op.InvalidateCmd{At: gtx.Now.Add(time.Second / 25)}
 					gtx.Execute(inv)
 					return fillWidget.Layout(gtx)
+				})
+			}),
+		layout.Rigid(
+			// The height of the spacer is 25 Device independent pixels
+			layout.Spacer{Height: unit.Dp(250)}.Layout,
+		),
+		layout.Rigid(
+			func(gtx C) D {
+				if len(readings.Data) <= 0 {
+					return D{}
+				}
+				list := layout.List{Axis: layout.Vertical, Alignment: layout.Middle}
+				hdr := material.H5(th, "Past Fill Levels")
+				hdr.Alignment = text.Middle
+				hdr.Font.Weight = font.Bold
+
+				inset := layout.Inset{Left: 200, Right: 200}
+				return inset.Layout(gtx, func(gtx C) D {
+					return list.Layout(gtx, len(readings.Data)+1, func(gtx layout.Context, index int) layout.Dimensions {
+						if index == 0 {
+							return hdr.Layout(gtx)
+						}
+						txt := material.H6(th, fmt.Sprintf("%+v", readings.Data[index-1]))
+						txt.Alignment = text.Middle
+						return txt.Layout(gtx)
+					})
 				})
 			}),
 		layout.Rigid(
@@ -235,7 +276,7 @@ func setupBleClient() {
 	)
 	if err := c.Init(); err != nil {
 		l.Error("error while setting up ble client", "error", err)
-		os.Exit(1)
+		return
 	}
 
 	isConnected = true
@@ -250,6 +291,12 @@ func setupBleClient() {
 		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", d)
 		currentFillPercentage = getFillPercentageFromDepth(d)
 		currentFillLevel = d
+
+		l.Debug("posting new reading to api")
+		err = PostReading(Reading{Timestamp: time.Now(), Value: float64(currentFillLevel)})
+		if err != nil {
+			l.Error("failed to post reading", "error", err)
+		}
 	}
 }
 

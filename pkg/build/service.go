@@ -7,6 +7,7 @@ import (
 const (
 	ServiceName    = "Smart Flask"
 	ServiceVersion = "0.1"
+	BackendAddr    = "http://localhost:8000"
 )
 
 var (

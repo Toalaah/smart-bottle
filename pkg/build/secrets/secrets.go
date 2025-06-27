@@ -33,3 +33,6 @@ func init() {
 		panic(err)
 	}
 }
+
+const BackendUsername = "testuser"
+const BackendPassword = "secret"
