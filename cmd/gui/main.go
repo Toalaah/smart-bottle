@@ -162,7 +162,7 @@ func drawLayout(gtx C, th *material.Theme) D {
 					}
 				}
 				inset := layout.Inset{Left: unit.Dp(200), Right: unit.Dp(200)}
-				e := material.Editor(th, editor, "Auth PIN")
+				e := material.Editor(th, editor, "****")
 				e.Font.Style = font.Italic
 				border := widget.Border{Color: color.NRGBA{A: 0x7f}, CornerRadius: unit.Dp(0), Width: unit.Dp(2)}
 				return inset.Layout(gtx, func(gtx C) D {
@@ -179,7 +179,7 @@ func drawLayout(gtx C, th *material.Theme) D {
 			func(gtx C) D {
 				inset := layout.Inset{Left: unit.Dp(200), Right: unit.Dp(200)}
 				for connectButton.Clicked(gtx) {
-					if isConnected {
+					if isConnected && isAuthed {
 						l.Info("disconnecting")
 						if c != nil {
 							c.Disconnect()
@@ -199,7 +199,7 @@ func drawLayout(gtx C, th *material.Theme) D {
 				}
 				return inset.Layout(gtx, func(gtx C) D {
 					s := "Connect"
-					if isConnected {
+					if isConnected && isAuthed {
 						s = "Disconnect"
 					}
 					return material.Button(th, connectButton, s).Layout(gtx)
@@ -264,6 +264,7 @@ func authBleClient() {
 			return
 		}
 	}
+	l.Debug("writing auth token", "pin", fmt.Sprintf("%+v", authKeyBuf.Bytes()))
 	if err := c.Auth(authKeyBuf.Bytes()); err != nil {
 		l.Error("auth error", "error", err)
 	}
@@ -293,7 +294,9 @@ func setupBleClient() {
 		currentFillLevel = d
 
 		l.Debug("posting new reading to api")
-		err = PostReading(Reading{Timestamp: time.Now(), Value: float64(currentFillLevel)})
+		reading := Reading{Timestamp: time.Now(), Value: float64(currentFillLevel)}
+		err = PostReading(reading)
+		readings.Data = append(readings.Data, reading)
 		if err != nil {
 			l.Error("failed to post reading", "error", err)
 		}

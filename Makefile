@@ -31,6 +31,10 @@ build-uf2: generate ## Build UF2 file for flashing
 	@tinygo build -target=$(TARGET) -tags $(TAGS) $(FLAGS) -o main.uf2 $(PROG)
 .PHONY: build-uf2
 
+test: ## Run tests
+	@find . -type f -iname '*_test.go' | xargs -n1 dirname | xargs go test
+.PHONY: test
+
 clean: ## Remove all build artifacts
 	@find . -maxdepth 1 -type f -executable -exec sh -c 'echo {} && rm {}' \;
 	@find . -type f -name '*.pem' -not -path './backend/.venv/*' -exec sh -c 'echo {} && rm {}' \;

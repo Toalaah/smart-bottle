@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"time"
 
 	"github.com/toalaah/smart-bottle/pkg/build"
+	"github.com/toalaah/smart-bottle/pkg/build/secrets"
+	"github.com/toalaah/smart-bottle/pkg/crypto"
 	"github.com/toalaah/smart-bottle/pkg/transport"
 	"tinygo.org/x/bluetooth"
 )
@@ -17,9 +20,11 @@ type GattService struct {
 	logger      *slog.Logger
 	advInterval time.Duration
 
-	txHnd, authHnd               bluetooth.Characteristic
-	txBufSize, authKeySize       uint32
+	txHnd, nonceHnd, authRxHnd   bluetooth.Characteristic
+	txBufSize                    uint32
 	authEnabled, didAuthenticate bool
+
+	authNonce [build.NonceLen]byte
 
 	connectedDevice chan bluetooth.Device
 }
@@ -28,10 +33,11 @@ func New(opts ...ServiceOption) *GattService {
 	s := &GattService{
 		adapter:         bluetooth.DefaultAdapter,
 		txHnd:           bluetooth.Characteristic{},
+		nonceHnd:        bluetooth.Characteristic{},
+		authRxHnd:       bluetooth.Characteristic{},
 		logger:          nil,
 		advInterval:     1000 * time.Millisecond,
 		txBufSize:       128,
-		authKeySize:     uint32(len(build.UserPin)),
 		authEnabled:     false,
 		didAuthenticate: false,
 		connectedDevice: make(chan bluetooth.Device, 1),
@@ -109,22 +115,33 @@ func (s *GattService) Init() error {
 	}
 
 	if s.authEnabled {
-		services[1].Characteristics = append(services[1].Characteristics, bluetooth.CharacteristicConfig{
-			Handle: &s.authHnd,
+		encNonce, err := crypto.EncryptEphemeralStaticX25519(s.authNonce[:], secrets.UserPublicKey)
+		if err != nil {
+			return err
+		}
+		nonce := bluetooth.CharacteristicConfig{
+			Handle: &s.nonceHnd,
+			UUID:   build.CharacteristicUUIDNonce,
+			Value:  append([]byte{uint8(transport.Nonce), uint8(len(encNonce))}, encNonce...),
+			Flags:  bluetooth.CharacteristicReadPermission,
+		}
+		rxAuth := bluetooth.CharacteristicConfig{
+			Handle: &s.authRxHnd,
 			UUID:   build.CharacteristicUUIDAuth,
-			Value:  make([]byte, s.authKeySize),
+			Value:  make([]byte, build.NonceLen),
 			Flags:  bluetooth.CharacteristicWritePermission | bluetooth.CharacteristicWriteWithoutResponsePermission,
 			WriteEvent: func(client bluetooth.Connection, offset int, value []byte) {
 				s.debug("received write event", "value", fmt.Sprintf("%+v", value))
-				if l := len(value); l != int(s.authKeySize) {
+				if l := len(value); l != int(build.NonceLen+len(secrets.PairingPin)) {
 					s.debug("auth key has unexpected length", "length", l)
 				}
-				if bytes.Compare(value, build.UserPin) == 0 {
+				if bytes.Compare(value, append(s.authNonce[:], secrets.PairingPin[:]...)) == 0 {
 					s.debug("auth succeeded")
 					s.didAuthenticate = true
 				}
 			},
-		})
+		}
+		services[1].Characteristics = append(services[1].Characteristics, nonce, rxAuth)
 	}
 
 	for _, service := range services {
@@ -210,11 +227,8 @@ func WithTXBufferSize(n uint32) ServiceOption {
 func WithAuth(enable bool) ServiceOption {
 	return func(s *GattService) {
 		s.authEnabled = enable
-	}
-}
-
-func WithAuthKeySize(n uint32) ServiceOption {
-	return func(s *GattService) {
-		s.authKeySize = n
+		if _, err := rand.Read(s.authNonce[:]); err != nil {
+			panic(err)
+		}
 	}
 }

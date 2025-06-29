@@ -27,7 +27,7 @@ func main() {
 		client.WithLogger(l),
 	)
 	must("init BLE client", c.Init())
-	must("authenticate", c.Auth(build.UserPin))
+	must("authenticate", c.Auth(secrets.PairingPin[:]))
 	for msg := range c.Queue() {
 		l.Debug("received message", "msg", msg)
 		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)

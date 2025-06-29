@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/toalaah/smart-bottle/pkg/build"
+	"github.com/toalaah/smart-bottle/pkg/build/secrets"
+	"github.com/toalaah/smart-bottle/pkg/crypto"
 	"github.com/toalaah/smart-bottle/pkg/transport"
 	"tinygo.org/x/bluetooth"
 )
@@ -16,6 +18,7 @@ type GattClient struct {
 
 	rxChar, authChar *bluetooth.DeviceCharacteristic
 	device           bluetooth.Device
+	authNonce        []byte
 }
 
 func New(opts ...ClientOption) *GattClient {
@@ -73,7 +76,7 @@ func (s *GattClient) Init() error {
 	svc := svcs[0]
 	s.debug("found service", "service", svc)
 	s.debug("discovering service characteristics", "id", svc.UUID().String())
-	characteristicIDs := []bluetooth.UUID{build.CharacteristicUUIDFillLevel, build.CharacteristicUUIDAuth}
+	characteristicIDs := []bluetooth.UUID{build.CharacteristicUUIDFillLevel, build.CharacteristicUUIDAuth, build.CharacteristicUUIDNonce}
 	s.debug("scanning for matching characteristics", "service", svc.UUID().String(), "characteristicIDs", characteristicIDs)
 
 	chars, err := svc.DiscoverCharacteristics(characteristicIDs)
@@ -92,6 +95,23 @@ func (s *GattClient) Init() error {
 		case build.CharacteristicUUIDAuth:
 			s.debug("found auth characteristic", "characteristicID", char.UUID().String())
 			s.authChar = &char
+		case build.CharacteristicUUIDNonce:
+			s.debug("found auth nonce", "characteristicID", char.UUID().String())
+			encNonce := make([]byte, 66)
+			msg := transport.Message{}
+			if _, err := char.Read(encNonce); err != nil {
+				return err
+			}
+			s.debug("read auth nonce", "value", encNonce)
+			if err := transport.UnmarshalBytes(&msg, encNonce); err != nil {
+				return err
+			}
+			nonce, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
+			if err != nil {
+				return err
+			}
+			s.debug("decrypted nonce", "value", fmt.Sprintf("%+v", nonce))
+			s.authNonce = nonce
 		}
 	}
 
@@ -110,12 +130,18 @@ func (s *GattClient) Init() error {
 	return nil
 }
 
+// Auth takes a static, preshared pairing pin and writes it to the bottle's auth characteristic in order to initiate readings. The pin is appended to a nonce value in order to prevent replay attacks.
 func (s *GattClient) Auth(pin []byte) error {
-	s.debug("performing authentication", "pin", fmt.Sprintf("%+v", pin))
+	v := s.authNonce
+	if pin != nil && len(pin) > 0 {
+		v = append(v, pin...)
+	}
+	s.debug("performing authentication", "pin", fmt.Sprintf("%+v", v))
 	if s.authChar == nil {
 		return fmt.Errorf("auth characteristic is nil")
 	}
-	_, err := s.authChar.WriteWithoutResponse(pin)
+
+	_, err := s.authChar.WriteWithoutResponse(v)
 	return err
 }
 

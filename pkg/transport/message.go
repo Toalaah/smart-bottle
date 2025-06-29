@@ -9,6 +9,7 @@ type MessageType uint8
 const (
 	HeartBeat MessageType = 1 << iota
 	WaterLevel
+	Nonce
 )
 
 type Message struct {

@@ -17,6 +17,8 @@ var userPrivateKeyPEM []byte
 var UserPrivateKey []byte
 var UserPublicKey []byte
 
+var PairingPin = [4]byte{1, 3, 3, 7}
+
 func init() {
 	var err error
 	block, _ := pem.Decode(bottlePrivateKeyPEM)
