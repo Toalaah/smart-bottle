@@ -18,7 +18,7 @@ type GattClient struct {
 
 	rxChar, authChar *bluetooth.DeviceCharacteristic
 	device           bluetooth.Device
-	authNonce        []byte
+	authNonce        [build.NonceLen]byte
 }
 
 func New(opts ...ClientOption) *GattClient {
@@ -111,7 +111,7 @@ func (s *GattClient) Init() error {
 				return err
 			}
 			s.debug("decrypted nonce", "value", fmt.Sprintf("%+v", nonce))
-			s.authNonce = nonce
+			copy(s.authNonce[:], nonce[0:4])
 		}
 	}
 
@@ -132,7 +132,7 @@ func (s *GattClient) Init() error {
 
 // Auth takes a static, preshared pairing pin and writes it to the bottle's auth characteristic in order to initiate readings. The pin is appended to a nonce value in order to prevent replay attacks.
 func (s *GattClient) Auth(pin []byte) error {
-	v := s.authNonce
+	v := s.authNonce[:]
 	if pin != nil && len(pin) > 0 {
 		v = append(v, pin...)
 	}
