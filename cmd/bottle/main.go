@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -12,7 +13,6 @@ import (
 	"github.com/toalaah/smart-bottle/pkg/ble"
 	"github.com/toalaah/smart-bottle/pkg/ble/service"
 	"github.com/toalaah/smart-bottle/pkg/build"
-	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
 	"github.com/toalaah/smart-bottle/pkg/sensor"
 	"github.com/toalaah/smart-bottle/pkg/transport"
@@ -22,9 +22,11 @@ var (
 	l               *slog.Logger = nil
 	fillLevel       float32
 	err             error
-	buf             = make([]byte, 4)
+	fillBuf         = [4]byte{}
+	out             = [32]byte{}
 	publishInterval = time.Second * 3
 	msg             = &transport.Message{Type: transport.WaterLevel}
+	gcm             cipher.AEAD
 )
 
 func main() {
@@ -32,12 +34,12 @@ func main() {
 		cdc.EnableUSBCDC()
 		l = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-	time.Sleep(publishInterval)
+	time.Sleep(time.Second * 5)
 
 	svc := ble.NewService(
 		service.WithLogger(l),
 		service.WithAdvertisementInterval(1250*time.Millisecond),
-		service.WithTXBufferSize(66), // Type + length + 64 bytes payload
+		service.WithTXBufferSize(34), // Type + length + 32 bytes payload
 		service.WithAuth(true),
 	)
 	must("initialize BLE service", svc.Init())
@@ -49,6 +51,13 @@ func main() {
 	)
 	must("initialize depth sensor", depthSensor.Init())
 
+	// Perform a budget "TLS" connection (basically just a DH handshake).
+	// Wait until client has paired and authenticated.
+	key := svc.GetPairingKeyBlocking()
+	// Derive symmetric encryption channel.
+	gcm, err = crypto.NewGCM(key)
+	must("init gcm", err)
+
 	for {
 		time.Sleep(publishInterval)
 
@@ -59,11 +68,10 @@ func main() {
 			l.Debug("read fill level", "level", fillLevel)
 		}
 
-		binary.LittleEndian.PutUint32(buf, math.Float32bits(fillLevel))
-		cipher, err := crypto.EncryptEphemeralStaticX25519(buf, secrets.UserPublicKey)
-		must("encrypt", err)
+		binary.LittleEndian.PutUint32(fillBuf[:], math.Float32bits(fillLevel))
+		must("encrypt successfully", crypto.EncryptAES(gcm, fillBuf[:], out[:]))
 
-		msg.Load(cipher)
+		msg.Load(out[:])
 		must("send successfully", svc.SendMessage(msg))
 	}
 }

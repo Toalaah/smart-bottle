@@ -27,6 +27,7 @@ type GattService struct {
 	authNonce [build.NonceLen]byte
 
 	connectedDevice chan bluetooth.Device
+	keyChan         chan struct{}
 }
 
 func New(opts ...ServiceOption) *GattService {
@@ -41,6 +42,7 @@ func New(opts ...ServiceOption) *GattService {
 		authEnabled:     false,
 		didAuthenticate: false,
 		connectedDevice: make(chan bluetooth.Device, 1),
+		keyChan:         make(chan struct{}, 1),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -132,12 +134,19 @@ func (s *GattService) Init() error {
 			Flags:  bluetooth.CharacteristicWritePermission | bluetooth.CharacteristicWriteWithoutResponsePermission,
 			WriteEvent: func(client bluetooth.Connection, offset int, value []byte) {
 				s.debug("received write event", "value", fmt.Sprintf("%+v", value))
-				if l := len(value); l != int(build.NonceLen+len(secrets.PairingPin)) {
+				payload, err := crypto.DecryptEphemeralStaticX25519(value, secrets.BottlePrivateKey)
+				if err != nil {
+					s.debug("got error decrypting resent nonce", "error", err)
+					return
+				}
+				s.debug("decrypted payload", "value", fmt.Sprintf("%+v", payload))
+				if l := len(payload); l != int(build.NonceLen+len(secrets.PairingPin)) {
 					s.debug("auth key has unexpected length", "length", l)
 				}
-				if bytes.Compare(value, append(s.authNonce[:], secrets.PairingPin[:]...)) == 0 {
+				if bytes.Compare(payload, append(s.authNonce[:], secrets.PairingPin[:]...)) == 0 {
 					s.debug("auth succeeded")
 					s.didAuthenticate = true
+					s.keyChan <- struct{}{}
 				}
 			},
 		}
@@ -204,6 +213,12 @@ func (s *GattService) debug(msg string, args ...any) {
 	}
 }
 
+func (s *GattService) GetPairingKeyBlocking() []byte {
+	s.debug("waiting for pairing key event")
+	<-s.keyChan
+	return s.authNonce[:]
+}
+
 type ServiceOption func(*GattService)
 
 func WithLogger(l *slog.Logger) ServiceOption {
@@ -229,6 +244,8 @@ func WithAuth(enable bool) ServiceOption {
 		s.authEnabled = enable
 		if _, err := rand.Read(s.authNonce[:]); err != nil {
 			panic(err)
+		} else {
+			s.debug("generated nonce", "nonce", fmt.Sprintf("%+v", s.authNonce))
 		}
 	}
 }

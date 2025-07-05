@@ -8,7 +8,7 @@ const (
 	ServiceName    = "Smart Flask"
 	ServiceVersion = "0.1"
 	BackendAddr    = "http://localhost:8000"
-	NonceLen       = 4
+	NonceLen       = 32
 )
 
 var (

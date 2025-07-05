@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"log/slog"
@@ -20,6 +21,8 @@ var (
 	serviceUUID = build.ServiceUUID
 	l           = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	depth       float32
+	gcm         cipher.AEAD
+	buf         = [4]byte{}
 )
 
 func main() {
@@ -27,13 +30,20 @@ func main() {
 		client.WithLogger(l),
 	)
 	must("init BLE client", c.Init())
-	must("authenticate", c.Auth(secrets.PairingPin[:]))
+	key, err := c.Auth(secrets.PairingPin[:])
+	must("authenticate", err)
+
+	gcm, err := crypto.NewGCM(key)
+	must("init gcm", err)
+
 	for msg := range c.Queue() {
 		l.Debug("received message", "msg", msg)
-		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
-		must("decrypt", err)
-		depth = math.Float32frombits(binary.LittleEndian.Uint32(raw))
-		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "depth", depth)
+		err := crypto.DecryptAES(gcm, msg.Value, buf[:])
+		if err != nil {
+			l.Error("failed to decrypt", "error", err)
+		}
+		depth = math.Float32frombits(binary.LittleEndian.Uint32(buf[:]))
+		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", buf[:]), "depth", depth)
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/cipher"
 	"encoding/binary"
 	"fmt"
 	"image/color"
@@ -22,7 +23,6 @@ import (
 	"gioui.org/widget/material"
 	"github.com/toalaah/smart-bottle/pkg/ble"
 	"github.com/toalaah/smart-bottle/pkg/ble/client"
-	"github.com/toalaah/smart-bottle/pkg/build/secrets"
 	"github.com/toalaah/smart-bottle/pkg/crypto"
 )
 
@@ -34,6 +34,7 @@ var (
 	isConnected           bool               = false
 	isAuthed              bool               = false
 	readings              ReadingsResponse
+	gcm                   cipher.AEAD = nil
 
 	connectButton = new(widget.Clickable)
 	authKeyBuf    = new(bytes.Buffer)
@@ -162,7 +163,7 @@ func drawLayout(gtx C, th *material.Theme) D {
 					}
 				}
 				inset := layout.Inset{Left: unit.Dp(200), Right: unit.Dp(200)}
-				e := material.Editor(th, editor, "****")
+				e := material.Editor(th, editor, "Pin: ****")
 				e.Font.Style = font.Italic
 				border := widget.Border{Color: color.NRGBA{A: 0x7f}, CornerRadius: unit.Dp(0), Width: unit.Dp(2)}
 				return inset.Layout(gtx, func(gtx C) D {
@@ -265,8 +266,13 @@ func authBleClient() {
 		}
 	}
 	l.Debug("writing auth token", "pin", fmt.Sprintf("%+v", authKeyBuf.Bytes()))
-	if err := c.Auth(authKeyBuf.Bytes()); err != nil {
+	aesKey, err := c.Auth(authKeyBuf.Bytes())
+	if err != nil {
 		l.Error("auth error", "error", err)
+	}
+	gcm, err = crypto.NewGCM(aesKey)
+	if err != nil {
+		l.Error("failed to instantiate gcm cipher", "error", err)
 	}
 	isAuthed = true
 }
@@ -280,16 +286,21 @@ func setupBleClient() {
 		return
 	}
 
+	buf := [4]byte{}
 	isConnected = true
 	for msg := range c.Queue() {
 		l.Debug("received message", "msg", msg)
-		raw, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
-		if err != nil {
-			l.Error("error while decrypting payload", "error", err, "msg", msg)
+		if gcm == nil {
+			l.Debug("gcm is nil, skipping decryption")
 			continue
 		}
-		d := math.Float32frombits(binary.LittleEndian.Uint32(raw))
-		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", raw), "fillLevel", d)
+
+		err := crypto.DecryptAES(gcm, msg.Value, buf[:])
+		if err != nil {
+			l.Error("failed to decrypt", "error", err)
+		}
+		d := math.Float32frombits(binary.LittleEndian.Uint32(buf[:]))
+		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", buf), "fillLevel", d)
 		currentFillPercentage = getFillPercentageFromDepth(d)
 		currentFillLevel = d
 

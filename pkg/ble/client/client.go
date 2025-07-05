@@ -97,21 +97,23 @@ func (s *GattClient) Init() error {
 			s.authChar = &char
 		case build.CharacteristicUUIDNonce:
 			s.debug("found auth nonce", "characteristicID", char.UUID().String())
-			encNonce := make([]byte, 66)
+			encNonce := make([]byte, 256)
 			msg := transport.Message{}
-			if _, err := char.Read(encNonce); err != nil {
+			if n, err := char.Read(encNonce); err != nil {
 				return err
+			} else {
+				encNonce = encNonce[:n]
 			}
-			s.debug("read auth nonce", "value", encNonce)
+			s.debug("read auth nonce", "value", fmt.Sprintf("%+v", encNonce))
 			if err := transport.UnmarshalBytes(&msg, encNonce); err != nil {
 				return err
 			}
-			nonce, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
+			decNonce, err := crypto.DecryptEphemeralStaticX25519(msg.Value, secrets.UserPrivateKey)
 			if err != nil {
 				return err
 			}
-			s.debug("decrypted nonce", "value", fmt.Sprintf("%+v", nonce))
-			copy(s.authNonce[:], nonce[0:4])
+			s.debug("decrypted nonce", "value", fmt.Sprintf("%+v", decNonce))
+			copy(s.authNonce[:], decNonce[0:build.NonceLen])
 		}
 	}
 
@@ -131,18 +133,22 @@ func (s *GattClient) Init() error {
 }
 
 // Auth takes a static, preshared pairing pin and writes it to the bottle's auth characteristic in order to initiate readings. The pin is appended to a nonce value in order to prevent replay attacks.
-func (s *GattClient) Auth(pin []byte) error {
+func (s *GattClient) Auth(pin []byte) ([]byte, error) {
 	v := s.authNonce[:]
 	if pin != nil && len(pin) > 0 {
 		v = append(v, pin...)
 	}
+	s.debug("re-encrypting nonce with static pin", "pin", fmt.Sprintf("%+v", v), "nonce", fmt.Sprintf("%+v", s.authNonce))
+	reencNonce, err := crypto.EncryptEphemeralStaticX25519(v, secrets.BottlePublicKey)
+	if err != nil {
+		return nil, err
+	}
 	s.debug("performing authentication", "pin", fmt.Sprintf("%+v", v))
 	if s.authChar == nil {
-		return fmt.Errorf("auth characteristic is nil")
+		return nil, fmt.Errorf("auth characteristic is nil")
 	}
-
-	_, err := s.authChar.WriteWithoutResponse(v)
-	return err
+	_, err = s.authChar.WriteWithoutResponse(reencNonce)
+	return s.authNonce[:], err
 }
 
 func (s *GattClient) Disconnect() error {
