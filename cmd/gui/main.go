@@ -53,8 +53,9 @@ type (
 
 // Change according to height of water bottle
 var (
-	bottleDepthMax float32 = 14.399 // Empty
-	bottleDepthMin float32 = 3.700  // Full
+	bottleDepthMax float32 = 13.6 // Empty
+	bottleDepthMin float32 = 5.11 // Full
+
 )
 
 const (
@@ -301,7 +302,7 @@ func setupBleClient() {
 		}
 		d := math.Float32frombits(binary.LittleEndian.Uint32(buf[:]))
 		l.Debug("decrypted message", "msg", fmt.Sprintf("%+v", buf), "fillLevel", d)
-		currentFillPercentage = getFillPercentageFromDepth(d)
+		currentFillPercentage = getFillRatioFromDepth(d)
 		currentFillLevel = d
 
 		l.Debug("posting new reading to api")
@@ -314,7 +315,7 @@ func setupBleClient() {
 	}
 }
 
-func getFillPercentageFromDepth(d float32) float32 {
+func getFillRatioFromDepth(d float32) float32 {
 	if d >= bottleDepthMax {
 		return 0
 	}
@@ -322,5 +323,5 @@ func getFillPercentageFromDepth(d float32) float32 {
 		return 1
 	}
 	// For the sake of simplicity we assume a linear relationship, that is that the bottle is a perfect cylinder
-	return (d - bottleDepthMin) / (bottleDepthMax - bottleDepthMin)
+	return (bottleDepthMax - d) / (bottleDepthMax - bottleDepthMin)
 }
